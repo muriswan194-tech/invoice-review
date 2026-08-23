@@ -1,0 +1,41 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.pytestEnabled": false,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    },
+    "editor.formatOnSave": true
+  },
+  "ruff.importStrategy": "fromEnvironment",
+  "ruff.organizeImports": true,
+  "ruff.lint.args": ["--config", "${workspaceFolder}/backend/pyproject.toml"],
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": false
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": false
+  },
+  "eslint.useFlatConfig": true,
+  "eslint.format.enable": true,
+  "files.exclude": {
+    "**/.git": false,
+    "**/__pycache__": true,
+    "**/.ruff_cache": true,
+    "**/.venv": true,
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "files.associations": {
+    "*.py": "python",
+    "*.ts": "typescript",
+    "*.tsx": "typescriptreact"
+  },
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "typescript.tsdk": "${workspaceFolder}/frontend/node_modules/typescript/lib"
+}
