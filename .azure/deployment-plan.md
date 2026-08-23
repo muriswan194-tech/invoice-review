@@ -1,6 +1,6 @@
 # Azure Deployment Plan
 
-> **Status:** Approved
+> **Status:** Blocked — UAE North quota
 
 Generated: 2026-08-23
 
@@ -88,7 +88,8 @@ The React production build will be served by the existing FastAPI application fr
 | Microsoft.Web/serverfarms (F1 Free) | 1 | 1 | Free App Service allowance: up to 10 web/API apps, 1 GB storage, and 1 hour/day | Official Azure for Students benefit; current UAE North plans: 0 |
 | Microsoft.Web/sites | 1 | 1 | Included in the same free App Service allowance | Official Azure for Students benefit; current UAE North sites: 0 |
 
-**Capacity result:** Suitable for the planned one-app trial demo, subject to Azure offering F1 in UAE North at creation time.
+**Capacity result:** Blocked. Azure preflight validation reported `SubscriptionIsOverQuotaForSku` in UAE North:
+the subscription's Total VMs quota is 0 and one is required even for the requested F1 App Service plan.
 
 **Quota API note:** The required `az quota list` check was attempted. The subscription is not registered for `Microsoft.Quota`; registration would modify subscription state and is deliberately not performed without separate approval. Fallback read-only resource counts found 0 UAE North App Service sites and 0 plans. The plan relies on the official Azure for Students free App Service allowance and will stop if the portal/CLI cannot select F1.
 
@@ -125,7 +126,8 @@ The React production build will be served by the existing FastAPI application fr
 
 - [x] Make FastAPI serve the compiled React assets on the same origin
 - [x] Build and technically verify frontend and backend locally
-- [ ] Complete user manual UI walkthrough
+- [x] Complete user manual UI walkthrough (deferred by user; technical combined-route check passed)
+- [x] Generate F1-only Bicep infrastructure for validation and provisioning
 - [ ] Create one F1 Linux App Service Plan and one web app in UAE North
 - [ ] Deploy the combined application artifact
 - [ ] Configure health check and HTTPS
@@ -135,8 +137,9 @@ The React production build will be served by the existing FastAPI application fr
 
 ### Phase 3: Validation
 
-- [ ] Invoke azure-validate
-- [ ] Record validation proof
+- [x] Invoke azure-validate
+- [x] Record validation proof
+- [ ] Resolve UAE North App Service quota blocker
 
 ### Phase 4: Deployment
 
@@ -147,7 +150,15 @@ The React production build will be served by the existing FastAPI application fr
 
 ## 8. Validation Proof
 
-Not yet validated.
+| Check | Command Run | Result | Timestamp |
+|-------|-------------|--------|-----------|
+| Azure CLI | `az version` | Passed — Azure CLI 2.89.1 | 2026-08-23 |
+| Azure authentication | `az account show` | Passed — Azure for Students subscription selected | 2026-08-23 |
+| Bicep compilation | `az bicep build --file infra/main.bicep` | Passed | 2026-08-23 |
+| Template validation | `az deployment sub validate ...` | Failed — UAE North Total VMs quota is 0; 1 required | 2026-08-23 |
+
+**Validation result:** Not validated. Deployment must not proceed until the user either requests a quota increase for
+UAE North or authorizes a different Azure region.
 
 ## Functional Verification
 
@@ -168,6 +179,9 @@ Not yet validated.
 | `backend/app/main.py` | Serve compiled React assets while preserving API routes | Complete |
 | `scripts/stage-appservice.ps1` | Create the generated static-assets deployment package | Complete |
 | `scripts/deploy-free-tier.ps1` | F1-only Azure CLI deployment | Complete |
+| `infra/main.bicep` | Subscription-scope F1-only infrastructure | Complete |
+| `infra/modules/app-service.bicep` | Linux App Service resources | Complete |
+| `infra/main.parameters.json` | UAE North deployment parameters | Complete |
 
 ---
 
@@ -175,6 +189,6 @@ Not yet validated.
 
 Current phase: Functional verification.
 
-1. Complete a local manual UI walkthrough.
-2. Validate the prepared deployment package.
-3. Provision and deploy only if Azure accepts the F1 Free SKU in UAE North.
+1. Choose whether to request the free UAE North quota increase or select another region.
+2. Re-run validation.
+3. Provision and deploy only if validation passes with the F1 Free SKU.
