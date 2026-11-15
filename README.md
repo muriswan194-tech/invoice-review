@@ -93,7 +93,7 @@ Configure the Cloudflare Worker build with:
 
 ```text
 Build command: pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend build
-Deploy command: pnpm exec wrangler deploy
+Deploy command: npx wrangler deploy
 ```
 
 The repository root is the Wrangler project directory. Set
