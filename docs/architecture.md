@@ -1,24 +1,24 @@
-# Target architecture
+# GST Invoice Requirements Reviewer architecture
 
-Invoice Review will be built as a small local full-stack application. The learner starter intentionally contains only a FastAPI health endpoint and a React landing screen.
+GST Invoice Requirements Reviewer is a small local full-stack application. Azure Document Intelligence extracts invoice evidence and is the document-type gate; Azure OpenAI is called only when core GST fields or the entire GST tax breakup are missing; deterministic Python rules identify missing applicable GST particulars and visible local inconsistencies; a person interprets the result.
 
 ## Intended boundaries
 
 - Provider adapters normalize Azure responses before data reaches the domain.
-- Deterministic invoice and receipt rules remain separate from model extraction.
+- Deterministic GST invoice rules remain separate from model extraction.
 - Routes own HTTP concerns, a service owns orchestration, and a repository owns SQLite access.
 - Environment values are read through one backend settings module and one frontend environment module.
-- A person approves, rejects, or requests a supplier correction after seeing evidence and uncertainty.
+- A person compares the result with the source document and decides any follow-up outside the app.
 
 ## Target flow
 
 ```mermaid
 flowchart LR
-    user[Finance administrator] --> ui[React review UI]
+    user[Human accountant] --> ui[React review UI]
     ui --> api[FastAPI]
     api --> providers[Azure provider adapters]
     providers --> normalized[Normalized document data]
-    normalized --> rules[Deterministic finance rules]
+    normalized --> rules[Deterministic GST and company rules]
     rules --> db[(SQLite)]
     db --> ui
 ```

@@ -1,5 +1,211 @@
 # Build-along guide
 
+## Slice: GST-only invoice requirements reviewer
+
+### Outcome
+
+The active review flow is now a generic GST invoice requirements reviewer. It checks only applicable GST invoice particulars, local GSTIN structure/checksum, tax arithmetic, and available tax structure. Prism remains fictional demo context rather than a hard-coded business policy.
+
+### Why
+
+Project codes, purchase orders, GL accounts, duplicate-payment controls, TDS, payment decisions, and a specific buyer identity are valuable organisation controls, but they are not GST invoice requirements. Presenting them as GST failures obscures the actual tax-invoice review.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app/invoices/validation.py app/invoices/service.py app/invoices/routes.py app/config.py
+uv run --locked --no-sync python -m compileall -q app
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+The upload flow accepts invoices only. Processing ends after classification, extraction, and GST validation. The review page presents invoice particulars, GST requirements, GST arithmetic, tax structure, and extraction confidence beside the original source. It does not show GL selection, approval/rejection, project, PO, cost centre, TDS, duplicate, or company-policy findings.
+
+### Checkpoint
+
+- [x] GST requirements and internal accounting controls are no longer mixed in the active review flow.
+- [x] No fixed company GSTIN is used to validate a recipient.
+- [x] GL suggestion, advisor, duplicate, project, PO, cost-centre, TDS, and decision stages do not run for a review.
+- [x] Extraction confidence is visible evidence, not a GST exception.
+- [x] Missing particulars, verification items, and the concise check summary use the same white-glass visual language without weakening their status cues.
+- [x] On desktop, the review uses a wide two-pane workspace so the source document and extracted fields can be compared without wasting the available screen width.
+- [x] The global workspace menu stays at the far right of the desktop viewport rather than leaving the outer navigation space unused.
+- [x] The landing screen prioritises starting a review; saved reviews remain available from the workspace menu.
+- [x] The source pane identifies the uploaded invoice and provides compact download and open controls before the embedded document viewer.
+- [x] The review now leads with the GST outcome and next actions, then provides a two-pane source-and-correction workspace without a duplicate invoice-particulars table.
+- [x] Live invoice reviews no longer make a separate Azure OpenAI classification call; the invoice-only upload workflow uses Document Intelligence as its document-type gate.
+- [x] The remaining Azure OpenAI extraction is now conditional: a complete primary extraction proceeds directly to local GST validation, while missing core fields or a missing GST tax breakup trigger the fallback.
+- [x] The README and active code surface now describe only the GST invoice reviewer; inactive GL, advisor/chat, correction-email, batch-review, and internal-policy modules have been removed.
+- [x] The GST screen now declares its registered-recipient B2B profile and distinguishes applicable core particulars, conditional place of supply, reverse-charge review, missing values, locally invalid GSTINs, and fields outside this screen's scope.
+
+## Slice: India GST Exception Desk adaptation
+
+### Outcome
+
+The application is now branded as GST Invoice Exception Desk for Prism Projects India Pvt. Ltd. Invoice reviews use typed GSTIN, PAN, place-of-supply, HSN/SAC, INR tax, project, and cost-centre fields. Deterministic rules surface GST arithmetic, tax-structure, project-reference, duplicate, and potential TDS-review signals with a human route and next action.
+
+### Why
+
+The portfolio version demonstrates a realistic Indian finance workflow without claiming tax advice or autonomous compliance. AI extracts and explains evidence; local rules expose inspectable exceptions; an accountant makes the final decision.
+
+### Commands
+
+```bash
+uv run --locked --no-sync python scripts/generate_prism_demo.py
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+`Open fictional GST demo` opens a fully offline INR invoice for Saffron Build Systems Pvt. Ltd. and shows a missing project code, an invoice-total mismatch, and a potential TDS review signal. Findings route to Project manager, Supplier clarification, or Accountant / TDS review. No Azure credentials are needed until a live upload, advisor chat, or AI email draft is invoked.
+
+### Checkpoint
+
+- [x] Product identity and UI copy use GST Invoice Exception Desk and Prism Projects India Pvt. Ltd.
+- [x] GST invoice fields are typed, editable, and provider-independent.
+- [x] GSTIN checks are local structure/checksum checks only.
+- [x] Findings contain severity, evidence, route, and next action.
+- [x] Offline demo works without Azure environment variables.
+
+## Slice: Excel batch exception review
+
+### Outcome
+
+The desk now has a separate `.xlsx` workflow for one-sheet invoice batches. It maps common invoice headers, evaluates every row with the existing GST rules, and presents row-level status, exception codes, route, and next action in a table.
+
+### Why
+
+An Excel workbook contains many invoice records rather than one document. Keeping it separate from the PDF/image workflow preserves the detailed document review while adding a useful batch-exception path without duplicating GST policy logic.
+
+### Commands
+
+```bash
+uv run --locked --no-sync python scripts/generate_prism_batch_demo.py
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+The `Review Excel batch` action opens a fictional four-row INR workbook. Rows show GST arithmetic, mixed tax structure, missing project code, supplier GSTIN, and duplicate exceptions with routes to Supplier clarification, Project manager, Accountant / TDS review, or AP reviewer.
+
+### Checkpoint
+
+- [x] `.xlsx` upload is separate from PDF/image review.
+- [x] The first worksheet is parsed without adding a dependency.
+- [x] Common invoice headers are normalized into typed row records.
+- [x] Existing GST checks are reused for every row.
+- [x] The batch table makes risk, route, and next action visible.
+
+## Slice: Editable GST rule catalogue
+
+### Outcome
+
+The workspace menu now opens an editable GST rule catalogue with policy version, rule IDs, severity, fields, logic, source reference, limitation, route, and next action. Edits persist in the current browser through local storage.
+
+### Why
+
+Reviewers and portfolio evaluators can inspect the policy vocabulary without reading the code. The catalogue is deliberately metadata-only: editing it does not silently change executable validation rules.
+
+### Checkpoint
+
+- [x] Rule metadata is editable and resettable.
+- [x] The policy version is visible.
+- [x] Every entry states its source and limitation.
+- [x] The screen warns that executable policy changes require qualified review.
+
+## Slice: Editable company policy catalogue
+
+### Outcome
+
+The workspace now includes a separate Company policy catalogue for Prism's internal controls: project references, duplicate handling, supplier clarification, TDS-review routing, and the human approval gate.
+
+### Why
+
+Internal workflow policy should not be mixed with official GST references. The catalogue lets a company maintain policy metadata, ownership, routing, and limitations in one place.
+
+### Checkpoint
+
+- [x] Company policies are separate from GST rules and official sources.
+- [x] Policy metadata is editable and resettable in the current browser.
+- [x] Each policy shows an owner, route, next action, and limitation.
+- [x] The UI explains that executable backend behavior requires approved promotion.
+
+## Slice: Company policy document library
+
+### Outcome
+
+The Company policy catalogue now accepts PDF and DOCX policy documents. Files are stored locally, metadata is persisted in SQLite, and uploaded documents can be opened from the catalogue for human review.
+
+### Why
+
+Policy metadata explains what the company expects; approved documents provide the evidence behind those expectations. Keeping documents separate from GST source links makes internal policy auditable without presenting it as law.
+
+### Checkpoint
+
+- [x] PDF and DOCX policy documents can be uploaded.
+- [x] File metadata is persisted in the existing SQLite repository.
+- [x] Uploaded documents appear in the Company policy catalogue.
+- [x] Documents can be opened without invoking Azure or automatically changing executable policy.
+
+## Slice: GST reference and test-corpus organisation
+
+### Outcome
+
+Public GST reference PDFs, public layout templates, and fictional invoice examples are now separated
+under `gst/`. A `README.md` explains the intended use and limitations of each group, while
+`gst/manifest.json` records sources, scenario purpose, and future controlled-test cases.
+
+### Why
+
+A believable document-review demo needs varied layouts and known exception scenarios, but downloaded
+examples must not be mistaken for authoritative tax policy or valid client data. Keeping references,
+layouts, and deliberately incomplete invoice examples separate makes the evaluation material easier
+to inspect and safer to extend.
+
+### Checkpoint
+
+- [x] Official references are separate from upload test material.
+- [x] Public layout templates are labelled as OCR/visual exploration material, not compliance proof.
+- [x] Downloaded fictional invoices are labelled as missing-field exception scenarios.
+- [x] The corpus manifest records source URLs, limitations, and planned test scenarios.
+
+## Slice: Missing-data checklist
+
+### Outcome
+
+The GST and policy exceptions heading now contains a local-only `Download missing-data checklist`
+action. It creates a text file that lists only policy issues caused by absent source data, together
+with the relevant route and next action.
+
+### Why
+
+Reviewers often need to ask a supplier, project manager, or accountant for several missing details.
+A compact checklist prevents them from manually copying every finding while avoiding an unnecessary
+full export of invoice data.
+
+### Checkpoint
+
+- [x] The action is beside the GST and policy exceptions summary.
+- [x] The file is generated in the browser and is not sent to an external service.
+- [x] Each checklist item includes the missing field, why it matters, route, and next action.
+- [x] Invalid or mismatched values are excluded; the checklist is limited to absent source data.
+
 The complete guided build lives at <https://learn.datalumina.com/docs/invoice-review>. This local guide records the first checkpoint represented by the `main` branch.
 
 ## Starter outcome
@@ -56,7 +262,7 @@ checkable target, and severity is what separates a blocking error from an adviso
 
 ### What changed
 
-- `app/config.py` gained `AppConfig` for fixed Northstar policy: own VAT number, total tolerance, and the
+- `app/config.py` gained `AppConfig` for fixed company policy: own VAT number, total tolerance, and the
   0.80 confidence threshold. These are policy, not environment values.
 - `app/invoices/models.py` gained `purchase_order` and now owns `invoice_key_parts`, so validation no longer
   imports the repository.
@@ -104,7 +310,7 @@ Policy was exercised against the manifest scenarios with in-memory documents:
 - [x] Deterministic checks produce coded issues with error or warning severity.
 - [x] Missing purchase order reports `purchase_order_missing` as a warning.
 - [x] Primary confidence below 0.80 reports `low_extraction_confidence` as a warning.
-- [x] A customer VAT number that is not Northstar's reports `customer_vat_id_mismatch`.
+- [x] A customer VAT number that does not match the company's reports `customer_vat_id_mismatch`.
 - [x] Duplicate detection is a pure rule; the service owns persistence.
 - [x] Approval is blocked while any error-severity issue is open.
 - [x] A stored review can be deleted so the same document can be demonstrated again.
@@ -175,7 +381,7 @@ The API surface is now `POST /invoices/upload`, `GET /invoices/history`, `GET/PU
 - [x] A reviewer can correct any editable field, and the corrected field is marked `human`.
 - [x] Policy re-runs after a correction, so a resolved error disappears.
 - [x] The server refuses approval while error-severity issues remain open.
-- [x] The server refuses approval until a valid Northstar GL account is selected.
+- [x] The server refuses approval until a valid GL account is selected.
 - [x] A decided document can no longer be edited or re-categorized.
 - [x] Deleting a review also removes its stored upload.
 - [x] Backend lint passes.
@@ -472,7 +678,7 @@ is ignored by Git because it is a deployment artifact.
 
 The review console now asks the `invoice-review-advisor` prompt agent in Microsoft Foundry to explain the
 already-computed evidence and recommend a next action. The recommendation is visible in each review, but it
-cannot approve an invoice or alter Northstar policy.
+cannot approve an invoice or alter company policy.
 
 ### Why
 
@@ -519,6 +725,246 @@ pnpm build
 - [x] The advisor recommendation is displayed without controlling approval.
 - [x] Foundry authentication remains server-side.
 
+## Slice: contextual advisor conversation
+
+### Outcome
+
+The prepared-review screen now presents the Foundry agent as an invoice advisor, not a general chatbot. Maya first sees its recommendation and evidence-led reasons, then can open **Ask about this review** for focused questions about that exact document.
+
+### Why
+
+The human decision remains the centre of the workflow. A generic chat window has no useful starting context and encourages unsupported questions. The conversation now receives the saved document fields, deterministic checks, coded issues, conflicts, and GL suggestion, and is instructed to explain evidence rather than make approval decisions.
+
+### What changed
+
+- The advisor card has a clear action and the conversation includes suggested questions from the agent, with safe defaults when a previous review has no saved recommendation.
+- `ChatPanel` sends the ongoing conversation through the shared API client, so local and deployed environments use the configured API base URL.
+- `POST /invoices/{id}/chat` supplies a server-created evidence context and rejects client-created system messages.
+- The Foundry agent is explicitly instructed not to invent facts or control approval, rejection, or correction decisions.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+After a document finishes processing, select **Ask about this review** beneath the AI review advisor. Choose a suggested question such as “Why is this document blocked?” or write a focused question. The response is displayed in the review page and explains the current document's evidence only.
+
+### Checkpoint
+
+- [x] The review screen gives the Foundry agent a clear, contextual role.
+- [x] Suggested questions help the reviewer start a relevant conversation.
+- [x] Chat includes the existing review evidence, not a generic empty prompt.
+- [x] The agent cannot become the policy or decision maker.
+
+## Slice: original-document preview
+
+### Outcome
+
+The prepared-review page now keeps the original PDF or image beside the extracted fields, checks, AI guidance, and accounting decision. Maya can compare a suspect value with its source without leaving the review flow.
+
+### Why
+
+The reviewer needs evidence, not just extracted text. A preview makes the human verification step tangible and keeps the AI in an advisory role. The browser receives a document through a review-specific endpoint; it never receives the local upload directory path.
+
+### What changed
+
+- `GET /invoices/{id}/document` resolves only the stored filename for that review, validates that it stays within the upload directory, and returns PDF, PNG, or JPEG content inline.
+- `DocumentPreview` renders PDFs in an iframe and images in an accessible image panel, with an option to open the original in a separate tab.
+- The review screen uses a two-column evidence workspace on desktop; on narrow screens the source document appears above the fields.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+Open a stored review. The **Original document** panel displays its source file next to the prepared result. A missing review or missing locally stored source returns a clear `404` response instead of exposing a filesystem path.
+
+### Checkpoint
+
+- [x] Reviewers can compare extracted values with the original PDF or image.
+- [x] The browser uses a review-specific endpoint, not a public upload folder.
+- [x] The preview is responsive and remains available in a separate tab.
+
+## Slice: truthful processing progress
+
+### Outcome
+
+The processing screen now advances only when the server begins each real review operation. It shows classification, extraction, deterministic policy validation, GL suggestion, and advisor preparation as separate stages.
+
+### Why
+
+A timed progress animation suggests work that may not have happened. This flow sends server-streamed events from the same request that processes the upload, so the reviewer can see where cloud processing is spending time without introducing a queue, worker, or background job.
+
+### What changed
+
+- `process_document_events` yields a progress event before each provider or deterministic stage, then one completed-review event after persistence.
+- `POST /invoices/upload/stream` returns those events as a server-sent event stream; existing `POST /invoices/upload` remains available for a non-streaming API consumer.
+- The React API client reads the stream and moves the processing screen to the reported stage. Completed stages gain a check mark; an error event returns the reviewer to upload with a useful message.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+Upload a document and watch the processing screen. A stage is marked complete only after the backend has begun the next operation; the current stage reflects the operation actually in progress.
+
+### Checkpoint
+
+- [x] Processing stages correspond to real backend operations.
+- [x] The browser receives progress from the same upload request.
+- [x] No worker, queue, or timed fake progress was added.
+
+## Slice: credit-safe demo mode
+
+### Outcome
+
+The landing and upload screens offer **Open demo invoice**. It opens one fictional Bright Spark Europe invoice with an offline extraction, policy result, GL suggestion, and advisor explanation. The demo never calls Document Intelligence, Azure OpenAI, or Foundry.
+
+### Why
+
+A portfolio or classroom presentation should be reliable and should not spend Azure student credits. A clearly labelled fixture makes it possible to demonstrate review fields, evidence preview, findings, GL selection, and approval without pretending that an AI request occurred.
+
+### What changed
+
+- `POST /invoices/demo` copies the fictional sample into safe local upload storage and prepares its review from fixed, inspectable data.
+- Demo records are explicitly marked in SQLite and excluded from duplicate-invoice detection. Opening the demo again first removes only the previous demo record and its copied file.
+- The review displays a **Demo mode** notice. Advisor chat and correction-email drafting are unavailable because either would make a cloud request.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+Select **Open demo invoice** from the landing page. A prepared fictional review opens immediately with its source PDF. The browser makes no Azure request; you can select the suggested GL account and record an approval as part of the walkthrough.
+
+### Checkpoint
+
+- [x] A full fictional review can be demonstrated with no Azure calls or credit usage.
+- [x] The original source PDF still appears in the review workspace.
+- [x] Demo data cannot cause a duplicate warning on real uploads.
+- [x] Controls that would call an LLM are disabled in demo mode.
+
+## Slice: clickable advisor evidence
+
+### Outcome
+
+Every AI advisor recommendation now includes an **Evidence used** trail. The reviewer can select its links to jump directly to the original document, extracted fields, policy checks, open issues, or GL suggestion that underpin the guidance.
+
+### Why
+
+An explanation is useful only when Maya can inspect its basis. The link targets come from deterministic review data, not model-generated citations, so the interface never pretends that the agent verified a field it did not receive.
+
+### What changed
+
+- The review workspace gives its document, fields, policy issues, deterministic checks, and general-ledger sections stable in-page anchors.
+- The advisor card derives an evidence trail from the saved review state and renders it as clear, keyboard-focusable links.
+- The compact links preserve the minimal review layout while making the source of the advisor's reasoning inspectable.
+
+### Commands
+
+```bash
+cd frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+### Observable result
+
+Open the demo invoice or any prepared review. Under the advisor’s reasons, select **Original document**, **Extracted fields**, **policy checks**, **policy issues** when present, or **GL suggestion**. The page scrolls to that source section.
+
+### Checkpoint
+
+- [x] Advisor evidence can be inspected without a second AI request.
+- [x] Evidence links come from saved review data, not unverified model citations.
+- [x] Every anchor remains keyboard accessible and has scroll spacing below the application navigation.
+
+## Slice: remove the legacy cloud smoke script
+
+### Outcome
+
+The obsolete `backend/app/test.py` script has been removed. It loaded environment variables outside the application settings module and sent an unrelated model prompt, which made it unsuitable for a credit-safe local project.
+
+### Why
+
+Supported verification is explicit: backend lint, the offline 13-document policy evaluation, frontend checks, the local health endpoint, and the deliberately labelled demo mode. A hidden one-off script should not be able to spend Azure credits or bypass the provider and configuration boundaries.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+uv run --locked --no-sync python scripts/evaluate_corpus.py --offline
+```
+
+### Checkpoint
+
+- [x] No legacy smoke script reads secrets outside `app/config.py`.
+- [x] Offline verification remains available without any Azure request.
+
+## Slice: broader GL account selection
+
+### Outcome
+
+The fixed GL catalog now covers common premises, professional, technology, project, operational, and administrative spend in addition to the original cleaning, maintenance, utilities, travel, and equipment accounts.
+
+### Why
+
+A compact catalog made otherwise distinct supplier invoices compete for the same generic account. The broader fixed list gives the reviewer and AI suggestion a more accurate set of allowed choices while the reviewer remains responsible for the final selection.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app scripts
+```
+
+### Observable result
+
+The account selector and `GET /accounting/gl-accounts` offer rent and utilities, professional services, IT and software, insurance, construction materials, subcontractors, freight, office supplies, and other general expense categories. The server continues to reject any code outside this fixed list.
+
+### Checkpoint
+
+- [x] General expense categories are available to reviewers and GL suggestions.
+- [x] The catalog remains the single source of allowed account codes.
+- [x] Server-side account validation remains fixed and deterministic.
+
 - [ ] The first sample invoice can be read with Azure Document Intelligence.
 - [ ] Invoice and receipt results have a shared typed financial-document format.
 - [ ] Azure results are normalized into typed dates, decimal amounts, and currency codes.
@@ -540,7 +986,7 @@ pnpm build
 - [ ] Upload results show the Azure OpenAI classification suggestion and confidence.
 - [ ] Azure OpenAI fills only missing fields, while primary values and conflicts remain visible.
 - [ ] The frontend shows the source of each extracted field.
-- [ ] Azure OpenAI suggests only a fixed Northstar GL account.
+- [ ] Azure OpenAI suggests only a fixed GL account.
 - [ ] Locked backend and frontend installs succeed.
 - [ ] Backend lint passes.
 - [ ] Frontend type-check, lint, and production build pass.

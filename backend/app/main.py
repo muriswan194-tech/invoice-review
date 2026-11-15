@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.accounting.routes import router as accounting_router
 from app.config import APP_CONFIG
+from app.gst_sources.routes import router as gst_sources_router
 from app.invoices.routes import router as invoice_router
 
-app = FastAPI(title="Invoice Review")
+app = FastAPI(title="GST Invoice Requirements Reviewer")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(APP_CONFIG.allowed_origins),
@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(invoice_router)
-app.include_router(accounting_router)
+app.include_router(gst_sources_router)
 
 
 @app.get("/health")

@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Public reference material and fictional GST invoice examples for manual exploration and controlled evaluation.",
+  "limitations": [
+    "This manifest does not establish legal GST compliance.",
+    "A qualified accountant or CA must review a rule before it becomes executable policy.",
+    "Third-party sample templates must not be redistributed without confirming their licence."
+  ],
+  "sources": {
+    "cbic_tax_invoice_flier": {
+      "url": "https://cbic-gst.gov.in/hindi/pdf/e-version-gst-fliers/tax-invoice-efliers.pdf",
+      "purpose": "Official field-reference material."
+    },
+    "gst_portal_welcome_kit": {
+      "url": "https://tutorial.gst.gov.in/downloads/news/welcome_kit_for_new_taxpyers.pdf",
+      "purpose": "Official introductory GST reference material."
+    },
+    "invoicemodo_templates": {
+      "url": "https://www.invoicemodo.com/templates",
+      "purpose": "Public template layouts for visual extraction exploration."
+    },
+    "sampleyogi_invoice_samples": {
+      "url": "https://www.sampleyogi.com/samples/invoice-india-gst",
+      "purpose": "Public fictional invoice examples used as missing-field scenarios."
+    }
+  },
+  "documents": [
+    {
+      "path": "reference/tax-invoice-efliers.pdf",
+      "kind": "official_reference",
+      "source": "cbic_tax_invoice_flier",
+      "use": "Use to understand tax-invoice fields; do not upload as an invoice test."
+    },
+    {
+      "path": "reference/welcome_kit_for_new_taxpyers.pdf",
+      "kind": "official_reference",
+      "source": "gst_portal_welcome_kit",
+      "use": "Use as introductory GST field-reference material; do not upload as an invoice test."
+    },
+    {
+      "path": "layout-samples/InvoiceModo-*.pdf",
+      "kind": "layout_sample_set",
+      "source": "invoicemodo_templates",
+      "use": "Explore OCR and visual-layout variation only; confirm source terms before redistribution."
+    },
+    {
+      "path": "test-invoices/missing-fields/*.pdf",
+      "kind": "fictional_exception_sample_set",
+      "source": "sampleyogi_invoice_samples",
+      "use": "Confirm that extraction finds basic supplier, customer, invoice, line-item, tax, and total data, then observe missing-field review behaviour.",
+      "expected_review_focus": [
+        "missing supplier and buyer GSTIN",
+        "missing or unusable HSN/SAC",
+        "missing place of supply",
+        "missing Prism project/PO data"
+      ]
+    }
+  ],
+  "next_scenarios_to_create": [
+    "valid intra-state B2B invoice with CGST and SGST",
+    "valid inter-state B2B invoice with IGST",
+    "invoice total arithmetic mismatch",
+    "mixed IGST and CGST/SGST review case",
+    "duplicate supplier GSTIN and invoice number",
+    "low-quality scan with known expected fields"
+  ]
+}

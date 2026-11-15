@@ -1,35 +1,38 @@
-import type { DocumentType } from './api'
-
 const INVOICE_EDITABLE = [
   'supplier_name',
-  'supplier_vat_id',
-  'customer_vat_id',
+  'supplier_gstin',
+  'buyer_gstin',
+  'place_of_supply',
+  'hsn_sac',
   'invoice_number',
-  'purchase_order',
+  'taxable_value',
+  'cgst',
+  'sgst_or_utgst',
+  'igst',
+  'cess',
+  'reverse_charge',
   'date',
-  'due_date',
-  'subtotal',
-  'vat_total',
   'total',
-  'currency',
-] as const
-
-const RECEIPT_EDITABLE = [
-  'merchant_name',
-  'date',
-  'subtotal',
-  'vat_total',
-  'total',
-  'currency',
 ] as const
 
 const LABELS: Record<string, string> = {
   document_type: 'Document type',
   supplier_name: 'Supplier name',
-  supplier_vat_id: 'Supplier VAT number',
-  customer_vat_id: 'Customer VAT number',
+  supplier_gstin: 'Supplier GSTIN',
+  buyer_gstin: 'Buyer GSTIN',
+  supplier_pan: 'Supplier PAN',
+  place_of_supply: 'Place of supply',
+  hsn_sac: 'HSN/SAC',
   invoice_number: 'Invoice number',
+  taxable_value: 'Taxable value',
+  cgst: 'CGST',
+  sgst_or_utgst: 'SGST / UTGST',
+  igst: 'IGST',
+  cess: 'Cess',
+  reverse_charge: 'Reverse charge',
   purchase_order: 'Purchase order',
+  project_code: 'Project code',
+  cost_centre: 'Cost centre',
   merchant_name: 'Merchant name',
   date: 'Document date',
   due_date: 'Due date',
@@ -39,8 +42,10 @@ const LABELS: Record<string, string> = {
   currency: 'Currency',
 }
 
-export function editableFields(documentType: DocumentType): readonly string[] {
-  return documentType === 'invoice' ? INVOICE_EDITABLE : RECEIPT_EDITABLE
+const INR_FIELDS = new Set(['taxable_value', 'cgst', 'sgst_or_utgst', 'igst', 'cess', 'total', 'subtotal', 'vat_total'])
+
+export function editableFields(): readonly string[] {
+  return INVOICE_EDITABLE
 }
 
 export function fieldLabel(fieldName: string): string {
@@ -54,7 +59,11 @@ export function sourceLabel(source: string | undefined): string {
   return 'Not found'
 }
 
-export function displayValue(value: unknown): string {
+export function displayValue(value: unknown, fieldName?: string): string {
+  if (fieldName && INR_FIELDS.has(fieldName) && value !== null && value !== undefined && value !== '') {
+    const amount = Number(value)
+    if (Number.isFinite(amount)) return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)
+  }
   return value === null || value === undefined || value === '' ? 'Not found' : String(value)
 }
 

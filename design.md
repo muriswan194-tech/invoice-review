@@ -1,8 +1,8 @@
-# Invoice Review — UI Design Brief
+# GST Invoice Exception Desk — UI Design Brief
 
 ## Purpose
 
-Rebuild the frontend presentation to follow the calm, guided **Datalumina Invoice Review** experience shown in the supplied screenshots. Keep the current backend, document-processing pipeline, policy rules, persistence, and human approval gate. This is a frontend and interaction redesign, not a rewrite of the finance workflow.
+Keep the calm, guided reviewer experience while presenting a distinct portfolio product for Prism Projects India Pvt. Ltd. The desk surfaces GST/document exceptions and routes them to a human accountant. It is not a tax-advice product and does not make autonomous payment decisions.
 
 ## Product principle
 
@@ -39,7 +39,7 @@ The existing API can remain the source of truth. The UI owns navigation and temp
 
 Show a centered card approximately 650–700 px wide.
 
-- Small organization label: `Northstar Facilities B.V.`
+- Small organization label: `Finance workspace`
 - Title: `Document review`
 - Short description: upload an invoice or receipt, run the review pipeline, inspect the prepared result before bookkeeping.
 - Primary action: `Review a document`
@@ -53,7 +53,7 @@ Show a centered card approximately 650–700 px wide.
 
 For all review and history screens, show a slim top bar.
 
-- Left: `Document review` with `Northstar Facilities B.V.` beneath it.
+- Left: `Document review` with `Finance workspace` beneath it.
 - Right: `History`, primary `New review`, and optionally `Sign out` only if authentication is deliberately added later.
 - Do not implement authentication as part of this redesign; it is outside the current project boundary.
 
@@ -79,7 +79,7 @@ Show a compact centered processing card rather than a generic spinner.
 - Display four ordered pipeline rows:
   1. `Classify document` — recognizes whether the upload is an invoice or receipt.
   2. `Extract and cross-check` — runs Document Intelligence and the independent LLM reading.
-  3. `Validate Northstar policy` — checks VAT, totals, dates, required data, and duplicate status.
+   3. `Validate GST and policy` — checks GSTIN structure, INR arithmetic, project references, and duplicate status.
   4. `Suggest GL account` — maps normalized fields to the fixed account catalog.
 - Each row must visibly be pending, active, complete, or failed. Do not claim a completed stage before its response is available.
 - On failure, explain the stage that failed and offer retry/back actions.
@@ -90,7 +90,7 @@ Organize the page as a vertical, readable review, not a multi-column dashboard.
 
 1. **Review extracted fields**
    - Explain that changes rerun the checks.
-   - Group form fields into Invoice details, Parties and VAT, and Amounts.
+   - Group form fields into Invoice details, GST identity, project references, and INR tax amounts.
    - Use a two-column form on wide screens and one column on narrow screens.
    - Mark field provenance discreetly: Document Intelligence, LLM fallback, Human, or Missing.
    - Primary save action: `Save and rerun checks`.

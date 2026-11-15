@@ -2,51 +2,25 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from stdnum.eu import vat
-
-from app.invoices.models import (
-    FinancialDocument,
-    InvoiceDocument,
-    ReceiptDocument,
-    invoice_key_parts,
-)
+from app.config import APP_CONFIG
+from app.invoices.models import InvoiceDocument
 
 Severity = Literal["error", "warning"]
 
-INVOICE_REQUIRED_CODES: dict[str, str] = {
-    "supplier_name": "vendor_name_required",
-    "supplier_vat_id": "vendor_vat_id_required",
-    "customer_vat_id": "customer_vat_id_required",
-    "invoice_number": "invoice_number_required",
-    "date": "invoice_date_required",
-    "currency": "currency_required",
-    "total": "invoice_total_required",
-}
-
-RECEIPT_REQUIRED_CODES: dict[str, str] = {
-    "merchant_name": "merchant_name_required",
-    "date": "transaction_date_required",
-    "currency": "currency_required",
-    "total": "receipt_total_required",
-    "vat_total": "receipt_vat_total_required",
-}
+SCREENING_PROFILE_NAME = "Standard registered-recipient B2B tax invoice"
 
 
 @dataclass(frozen=True)
 class Issue:
-    """One coded policy finding a reviewer can act on."""
+    """One GST invoice requirement or consistency finding."""
 
     code: str
     severity: Severity
     message: str
     field: str | None = None
-
-
-@dataclass(frozen=True)
-class TotalCheck:
-    status: str
-    difference: Decimal | None
-    message: str
+    evidence: dict[str, str] | None = None
+    route: str = "Supplier clarification"
+    next_action: str = "Check the source invoice and correct the applicable GST particular."
 
 
 @dataclass(frozen=True)
@@ -57,35 +31,32 @@ class RequiredFieldsCheck:
 
 
 @dataclass(frozen=True)
-class VatCheck:
+class ScreeningProfileCheck:
+    """State the scope behind this limited, inspectable invoice screen."""
+
+    status: str
+    name: str
+    assessments: dict[str, dict[str, str]]
+    message: str
+
+
+@dataclass(frozen=True)
+class GstinCheck:
     status: str
     supplier_valid: bool | None
-    customer_valid: bool | None
-    customer_matches: bool | None
+    buyer_valid: bool | None
     message: str
 
 
 @dataclass(frozen=True)
-class PositiveTotalCheck:
+class TotalCheck:
     status: str
+    difference: Decimal | None
     message: str
 
 
 @dataclass(frozen=True)
-class DateOrderCheck:
-    status: str
-    message: str
-
-
-@dataclass(frozen=True)
-class DuplicateCheck:
-    status: str
-    key: str | None
-    message: str
-
-
-@dataclass(frozen=True)
-class PurchaseOrderCheck:
+class TaxStructureCheck:
     status: str
     message: str
 
@@ -97,377 +68,248 @@ class ConfidenceCheck:
     message: str
 
 
-def check_total(document: FinancialDocument) -> TotalCheck:
-    if document.subtotal is None or document.vat_total is None or document.total is None:
-        return TotalCheck(
-            status="warning",
-            difference=None,
-            message="Subtotal, VAT, and total are all needed for this check.",
-        )
+def required_field_values(document: InvoiceDocument) -> dict[str, object]:
+    """Core particulars in the configured registered-recipient B2B profile."""
+    tax_breakup = any(
+        value is not None
+        for value in (document.cgst, document.sgst_or_utgst, document.igst, document.cess)
+    )
+    return {
+        "supplier_name": document.supplier_name,
+        "supplier_gstin": document.supplier_gstin,
+        "buyer_gstin": document.buyer_gstin,
+        "invoice_number": document.invoice_number,
+        "date": document.date,
+        "hsn_sac": document.hsn_sac,
+        "taxable_value": document.taxable_value,
+        "tax_breakup": tax_breakup,
+        "total": document.total,
+    }
 
-    difference = (document.subtotal + document.vat_total - document.total).copy_abs()
-    if difference <= Decimal("0.01"):
-        return TotalCheck(
-            status="passed",
-            difference=difference,
-            message="Subtotal and VAT match the total.",
-        )
 
-    return TotalCheck(
-        status="failed",
-        difference=difference,
-        message="Subtotal and VAT do not match the total.",
+def check_screening_profile(document: InvoiceDocument) -> ScreeningProfileCheck:
+    """Make applicability explicit instead of treating every absent value as a failure."""
+    assessments: dict[str, dict[str, str]] = {}
+    for field_name, value in required_field_values(document).items():
+        assessments[field_name] = {
+            "applicability": "applicable",
+            "state": "present" if value is not None and value != "" else "missing",
+        }
+    for field_name in ("supplier_gstin", "buyer_gstin"):
+        if assessments[field_name]["state"] == "present" and not validate_gstin(
+            getattr(document, field_name)
+        ):
+            assessments[field_name]["state"] = "invalid"
+
+    inter_state = document.igst is not None and document.igst > Decimal("0")
+    place_of_supply_state = "not_assessed"
+    if inter_state:
+        place_of_supply_state = "present" if document.place_of_supply else "missing"
+    assessments["place_of_supply"] = {
+        "applicability": "applicable" if inter_state else "not_applicable",
+        "state": place_of_supply_state,
+    }
+    assessments["reverse_charge"] = {
+        "applicability": "applicable",
+        "state": "present" if document.reverse_charge is not None else "missing",
+    }
+    return ScreeningProfileCheck(
+        "passed",
+        SCREENING_PROFILE_NAME,
+        assessments,
+        "Core particulars are screened for a registered-recipient B2B tax invoice. "
+        "Place of supply is assessed only when IGST is present.",
     )
 
 
-def check_positive_total(document: FinancialDocument) -> PositiveTotalCheck:
-    if document.total is None:
-        return PositiveTotalCheck(
-            status="warning",
-            message="A total is needed for this check.",
-        )
-
-    if document.total > Decimal("0"):
-        return PositiveTotalCheck(
-            status="passed",
-            message="The total is greater than zero.",
-        )
-
-    return PositiveTotalCheck(
-        status="failed",
-        message="The total must be greater than zero.",
+def check_required_fields(document: InvoiceDocument) -> RequiredFieldsCheck:
+    missing = tuple(
+        name
+        for name, value in required_field_values(document).items()
+        if value is None or value == ""
     )
-
-
-def check_date_order(document: InvoiceDocument) -> DateOrderCheck:
-    if document.date is None or document.due_date is None:
-        return DateOrderCheck(
-            status="warning",
-            message="Invoice date and due date are both needed for this check.",
-        )
-
-    if document.due_date >= document.date:
-        return DateOrderCheck(
-            status="passed",
-            message="The due date is on or after the invoice date.",
-        )
-
-    return DateOrderCheck(
-        status="failed",
-        message="The due date cannot be earlier than the invoice date.",
-    )
-
-
-def check_duplicate(document: InvoiceDocument, already_seen: bool) -> DuplicateCheck:
-    """Report duplicate status from an identity the caller already looked up."""
-    supplier_key, invoice_key = invoice_key_parts(document)
-    if supplier_key is None or invoice_key is None:
-        return DuplicateCheck(
-            status="warning",
-            key=None,
-            message="Supplier name and invoice number are needed for this check.",
-        )
-
-    key = f"{supplier_key}::{invoice_key}"
-    if already_seen:
-        return DuplicateCheck(
-            status="failed",
-            key=key,
-            message="This supplier invoice has already been seen.",
-        )
-
-    return DuplicateCheck(
-        status="passed",
-        key=key,
-        message="This supplier invoice has not been seen before.",
-    )
-
-
-def check_required_fields(document: FinancialDocument) -> RequiredFieldsCheck:
-    required = required_field_values(document)
-    missing = tuple(name for name, value in required.items() if value is None or value == "")
     if missing:
         return RequiredFieldsCheck(
-            status="failed",
-            missing=missing,
-            message="Required information is missing.",
+            "failed", missing, "Applicable GST invoice particulars are missing."
         )
+    return RequiredFieldsCheck("passed", (), "Base GST invoice particulars are present.")
 
-    return RequiredFieldsCheck(
-        status="passed",
-        missing=(),
-        message="Required information is present.",
+
+def check_gstins(document: InvoiceDocument) -> GstinCheck:
+    supplier_valid = validate_gstin(document.supplier_gstin)
+    buyer_valid = validate_gstin(document.buyer_gstin)
+    if supplier_valid is None or buyer_valid is None:
+        return GstinCheck(
+            "warning",
+            supplier_valid,
+            buyer_valid,
+            "Both GSTINs are needed for a local format check.",
+        )
+    if supplier_valid and buyer_valid:
+        return GstinCheck(
+            "passed",
+            True,
+            True,
+            "Both GSTINs pass local structure and checksum validation; "
+            "no government lookup was performed.",
+        )
+    return GstinCheck(
+        "failed",
+        supplier_valid,
+        buyer_valid,
+        "At least one GSTIN failed local structure or checksum validation.",
     )
 
 
-def required_field_values(document: FinancialDocument) -> dict[str, object]:
-    """Return the fields Northstar policy requires for this document type."""
-    if isinstance(document, InvoiceDocument):
-        return {
-            "supplier_name": document.supplier_name,
-            "supplier_vat_id": document.supplier_vat_id,
-            "customer_vat_id": document.customer_vat_id,
-            "invoice_number": document.invoice_number,
-            "date": document.date,
-            "total": document.total,
-            "currency": document.currency,
-        }
-    if isinstance(document, ReceiptDocument):
-        return {
-            "merchant_name": document.merchant_name,
-            "date": document.date,
-            "currency": document.currency,
-            "total": document.total,
-            "vat_total": document.vat_total,
-        }
-    return {}
-
-
-def check_vat_numbers(document: InvoiceDocument, expected_customer_vat_id: str) -> VatCheck:
-    supplier_valid = validate_vat(document.supplier_vat_id)
-    customer_valid = validate_vat(document.customer_vat_id)
-    customer_matches = compare_vat(document.customer_vat_id, expected_customer_vat_id)
-
-    if customer_matches is False:
-        return VatCheck(
-            status="failed",
-            supplier_valid=supplier_valid,
-            customer_valid=customer_valid,
-            customer_matches=False,
-            message="The customer VAT number is not Northstar's own VAT number.",
+def check_total(document: InvoiceDocument) -> TotalCheck:
+    if document.taxable_value is None or document.total is None:
+        return TotalCheck(
+            "warning", None, "Taxable value and total are needed for GST arithmetic reconciliation."
         )
-
-    if supplier_valid is None or customer_valid is None:
-        return VatCheck(
-            status="warning",
-            supplier_valid=supplier_valid,
-            customer_valid=customer_valid,
-            customer_matches=customer_matches,
-            message="Both VAT numbers are needed for this check.",
+    expected = document.taxable_value + sum(
+        (
+            value or Decimal("0")
+            for value in (document.cgst, document.sgst_or_utgst, document.igst, document.cess)
+        ),
+        Decimal("0"),
+    )
+    difference = (expected - document.total).copy_abs()
+    if difference <= APP_CONFIG.total_tolerance:
+        return TotalCheck(
+            "passed",
+            difference,
+            "Taxable value plus available GST components matches the invoice total.",
         )
-
-    if supplier_valid and customer_valid:
-        return VatCheck(
-            status="passed",
-            supplier_valid=True,
-            customer_valid=True,
-            customer_matches=customer_matches,
-            message="Both VAT numbers have a valid format and checksum.",
-        )
-
-    return VatCheck(
-        status="failed",
-        supplier_valid=supplier_valid,
-        customer_valid=customer_valid,
-        customer_matches=customer_matches,
-        message="At least one VAT number has an invalid format or checksum.",
+    return TotalCheck(
+        "failed", difference, "Taxable value plus GST components does not match the invoice total."
     )
 
 
-def check_purchase_order(document: InvoiceDocument) -> PurchaseOrderCheck:
-    if document.purchase_order and document.purchase_order.strip():
-        return PurchaseOrderCheck(
-            status="passed",
-            message="A purchase order reference is present.",
+def check_tax_structure(document: InvoiceDocument) -> TaxStructureCheck:
+    intra_state_tax = any(
+        value is not None and value > Decimal("0")
+        for value in (document.cgst, document.sgst_or_utgst)
+    )
+    inter_state_tax = document.igst is not None and document.igst > Decimal("0")
+    if intra_state_tax and inter_state_tax:
+        return TaxStructureCheck(
+            "failed", "CGST/SGST and IGST appear together; verify the tax structure."
         )
-
-    return PurchaseOrderCheck(
-        status="warning",
-        message="No purchase order reference was found on this invoice.",
+    if inter_state_tax and not document.place_of_supply:
+        return TaxStructureCheck(
+            "failed", "Place of supply is required when IGST indicates an inter-State supply."
+        )
+    if document.reverse_charge is None:
+        return TaxStructureCheck(
+            "warning",
+            "Reverse-charge status was not found; compare the source invoice before relying on it.",
+        )
+    return TaxStructureCheck(
+        "passed", "The available GST tax structure has no immediate local exception."
     )
 
 
-def check_confidence(confidence: float | None, threshold: float) -> ConfidenceCheck:
+def check_confidence(confidence: float | None) -> ConfidenceCheck:
     if confidence is None:
         return ConfidenceCheck(
-            status="warning",
-            confidence=None,
-            message="The primary extraction did not report a confidence score.",
+            "warning", None, "Primary extraction did not report a confidence score."
         )
-
-    if confidence >= threshold:
+    if confidence >= APP_CONFIG.low_confidence_threshold:
         return ConfidenceCheck(
-            status="passed",
-            confidence=confidence,
-            message="The primary extraction is confident about this document.",
+            "passed", confidence, "Primary extraction confidence is sufficient for review."
         )
-
     return ConfidenceCheck(
-        status="warning",
-        confidence=confidence,
-        message="The primary extraction confidence is below the review threshold.",
+        "warning",
+        confidence,
+        "Primary extraction confidence is low; compare fields with the source document.",
     )
 
 
-def normalize_vat(value: str | None) -> str | None:
-    """Strip separators and casing so two spellings of one VAT number compare equal."""
+def validate_gstin(value: str | None) -> bool | None:
     if not value:
         return None
-
-    return "".join(character for character in value if character.isalnum()).upper()
-
-
-def compare_vat(value: str | None, expected: str) -> bool | None:
-    normalized = normalize_vat(value)
-    if normalized is None:
-        return None
-
-    return normalized == normalize_vat(expected)
-
-
-def validate_vat(value: str | None) -> bool | None:
-    if not value:
-        return None
-
+    normalized = "".join(character for character in value if character.isalnum()).upper()
+    if len(normalized) != 15 or not normalized[:2].isdigit() or normalized[13] != "Z":
+        return False
+    if not (
+        normalized[2:7].isalpha() and normalized[7:11].isdigit() and normalized[11:13].isalnum()
+    ):
+        return False
+    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     try:
-        vat.validate(value)
-    except (vat.InvalidChecksum, vat.InvalidFormat, vat.InvalidLength):
+        checksum = 0
+        for index, character in enumerate(normalized[:14]):
+            product = alphabet.index(character) * (1 if index % 2 == 0 else 2)
+            checksum += product // 36 + product % 36
+        return alphabet[(36 - checksum % 36) % 36] == normalized[-1]
+    except ValueError:
         return False
-    except Exception:
-        return False
-    return True
 
 
-def collect_issues(
-    document: FinancialDocument,
-    checks: dict[str, object],
-) -> list[Issue]:
-    """Translate check results into the coded issue vocabulary the corpus manifest uses."""
+def collect_issues(document: InvoiceDocument, checks: dict[str, object]) -> list[Issue]:
     issues: list[Issue] = []
-    required_codes = (
-        INVOICE_REQUIRED_CODES if document.document_type == "invoice" else RECEIPT_REQUIRED_CODES
-    )
-
-    required = checks.get("required")
+    required = checks["required_particulars"]
     if isinstance(required, RequiredFieldsCheck):
         for field_name in required.missing:
-            code = required_codes.get(field_name)
-            if code is not None:
-                issues.append(
-                    Issue(
-                        code=code,
-                        severity="error",
-                        message=f"{field_label(field_name)} is required.",
-                        field=field_name,
-                    )
-                )
-
-    vat_check = checks.get("vat")
-    if isinstance(vat_check, VatCheck):
-        if vat_check.supplier_valid is False:
             issues.append(
                 Issue(
-                    code="vendor_vat_id_invalid",
-                    severity="error",
-                    message="The supplier VAT number has an invalid format or checksum.",
-                    field="supplier_vat_id",
+                    f"{field_name}_required",
+                    "error",
+                    f"{field_label(field_name)} is required for this GST invoice review.",
+                    field_name,
                 )
             )
-        if vat_check.customer_matches is False:
+    gstins = checks["gstins"]
+    if isinstance(gstins, GstinCheck):
+        if gstins.supplier_valid is False:
             issues.append(
                 Issue(
-                    code="customer_vat_id_mismatch",
-                    severity="error",
-                    message="The customer VAT number is not Northstar's own VAT number.",
-                    field="customer_vat_id",
+                    "supplier_gstin_invalid",
+                    "error",
+                    "Supplier GSTIN failed local structure or checksum validation.",
+                    "supplier_gstin",
                 )
             )
-        elif vat_check.customer_valid is False:
+        if gstins.buyer_valid is False:
             issues.append(
                 Issue(
-                    code="customer_vat_id_invalid",
-                    severity="error",
-                    message="The customer VAT number has an invalid format or checksum.",
-                    field="customer_vat_id",
+                    "buyer_gstin_invalid",
+                    "error",
+                    "Recipient GSTIN failed local structure or checksum validation.",
+                    "buyer_gstin",
                 )
             )
-
-    total = checks.get("total")
+    total = checks["gst_arithmetic"]
     if isinstance(total, TotalCheck) and total.status == "failed":
-        code = (
-            "invoice_total_mismatch"
-            if document.document_type == "invoice"
-            else "receipt_total_mismatch"
-        )
-        issues.append(Issue(code=code, severity="error", message=total.message, field="total"))
-
-    positive_total = checks.get("positive_total")
-    if isinstance(positive_total, PositiveTotalCheck) and positive_total.status == "failed":
+        issues.append(Issue("invoice_total_mismatch", "error", total.message, "total"))
+    tax_structure = checks["tax_structure"]
+    if isinstance(tax_structure, TaxStructureCheck) and tax_structure.status == "failed":
         issues.append(
-            Issue(
-                code="total_not_positive",
-                severity="error",
-                message=positive_total.message,
-                field="total",
-            )
+            Issue("tax_structure_inconsistent", "error", tax_structure.message, "place_of_supply")
         )
-
-    date_order = checks.get("date_order")
-    if isinstance(date_order, DateOrderCheck) and date_order.status == "failed":
-        issues.append(
-            Issue(
-                code="due_date_before_invoice_date",
-                severity="error",
-                message=date_order.message,
-                field="due_date",
-            )
-        )
-
-    duplicate = checks.get("duplicate")
-    if isinstance(duplicate, DuplicateCheck) and duplicate.status == "failed":
-        issues.append(
-            Issue(
-                code="duplicate_invoice",
-                severity="error",
-                message=duplicate.message,
-                field="invoice_number",
-            )
-        )
-
-    purchase_order = checks.get("purchase_order")
-    if isinstance(purchase_order, PurchaseOrderCheck) and purchase_order.status == "warning":
-        issues.append(
-            Issue(
-                code="purchase_order_missing",
-                severity="warning",
-                message=purchase_order.message,
-                field="purchase_order",
-            )
-        )
-
-    confidence = checks.get("confidence")
-    if isinstance(confidence, ConfidenceCheck) and confidence.status == "warning":
-        issues.append(
-            Issue(
-                code="low_extraction_confidence",
-                severity="warning",
-                message=confidence.message,
-                field=None,
-            )
-        )
-
     return issues
 
 
 def field_label(field_name: str) -> str:
-    """Turn a field name into reviewer-facing wording."""
-    labels = {
+    return {
         "supplier_name": "Supplier name",
-        "supplier_vat_id": "Supplier VAT number",
-        "customer_vat_id": "Customer VAT number",
+        "supplier_gstin": "Supplier GSTIN",
+        "buyer_gstin": "Recipient GSTIN",
         "invoice_number": "Invoice number",
-        "merchant_name": "Merchant name",
-        "purchase_order": "Purchase order",
-        "date": "Document date",
-        "due_date": "Due date",
-        "subtotal": "Subtotal",
-        "vat_total": "VAT total",
-        "total": "Total",
-        "currency": "Currency",
+        "date": "Invoice date",
+        "hsn_sac": "HSN/SAC",
+        "taxable_value": "Taxable value",
+        "tax_breakup": "GST tax breakup",
+        "total": "Invoice total",
+    }.get(field_name, field_name.replace("_", " ").capitalize())
+
+
+def run_checks(document: InvoiceDocument, primary_confidence: float | None) -> dict[str, object]:
+    return {
+        "screening_profile": check_screening_profile(document),
+        "required_particulars": check_required_fields(document),
+        "gstins": check_gstins(document),
+        "gst_arithmetic": check_total(document),
+        "tax_structure": check_tax_structure(document),
+        "extraction_confidence": check_confidence(primary_confidence),
     }
-    return labels.get(field_name, field_name.replace("_", " ").capitalize())
-
-
-def has_blocking_issues(issues: list[Issue]) -> bool:
-    """Approval is blocked while any error-severity issue remains open."""
-    return any(issue.severity == "error" for issue in issues)

@@ -1,29 +1,61 @@
-# Invoice Review
+# GST Invoice Requirements Reviewer
 
-This is the clean starter for an end-to-end invoice and receipt review application. You will build a workflow for Northstar Facilities B.V. that combines Azure document extraction, deterministic finance rules, SQLite persistence, and a human review interface.
+A small local application for reviewing supplier invoices against a defined GST
+invoice-screening profile. It helps an accountant find missing particulars and
+visible inconsistencies, then compare the extracted result with the original
+document.
 
-> You are on `main`, the learner starter. Active work is visible on `development`; the reviewed finished application is on `solution`.
+Prism is fictional demo context only. The application does not assume a company
+name, GSTIN, project code, purchase order, GL chart, TDS workflow, or approval
+policy.
 
-Tutorial: <https://learn.datalumina.com/docs/invoice-review>
+## What it does
 
-## What is included
+- Accepts one PDF, PNG, or JPEG invoice up to 4 MB.
+- Uses Azure AI Document Intelligence `prebuilt-invoice` as the primary extractor
+  and invoice gate.
+- Calls Azure OpenAI only if primary extraction misses core GST fields or the full
+  GST tax breakup. AI values fill gaps only; they never replace a conflicting
+  primary value.
+- Runs local, deterministic checks for missing configured particulars, GSTIN
+  structure/checksum, GST arithmetic, available tax structure, and extraction
+  confidence.
+- Shows field provenance, the original invoice, a downloadable missing-data
+  checklist, local review history, and a fictional offline demo.
 
-- The client brief and target architecture
-- A fictional 13-document multilingual corpus
-- Safe environment templates
-- Exact dependency pins and lockfiles
-- Backend and frontend project configuration
+## What it does not do
 
-Application code is intentionally absent. The tutorial builds the backend and frontend from this starting point.
+- It does not verify an active GST registration with a government service.
+- It does not provide tax or legal advice, determine input-tax-credit eligibility,
+  calculate TDS, select GL accounts, detect duplicate payments, or approve payment.
+- It does not treat internal company controls as GST invoice requirements.
+- It is a local, single-user teaching application, not a hosted production system.
 
-## Prerequisites
+## Review flow
 
-- Python 3.12 or newer
-- uv
-- Node.js 22 or newer
-- pnpm 11
+```text
+Upload invoice
+→ Document Intelligence extraction
+→ optional OpenAI gap-fill only when needed
+→ deterministic GST screening
+→ human comparison with the source and supplier follow-up
+```
 
-## Install
+The configured screening profile covers supplier and recipient GSTINs, invoice
+number and date, HSN/SAC, taxable value, GST breakup, total, conditional
+place-of-supply checks, local GSTIN validation, and arithmetic reconciliation.
+It is a documented screening profile, not a claim that every field is universally
+applicable in every GST scenario.
+
+The review labels a field as **applicable** or **not applicable** before interpreting
+it as **present**, **missing**, or locally **invalid**. For example, place of supply
+is applicable in this profile when IGST is detected; it is otherwise not applicable
+in this screen. An absent reverse-charge declaration is shown for human review, not
+as an automatic legal conclusion.
+
+## Run locally
+
+Prerequisites: Python 3.12+, uv, Node.js 22+, and pnpm 11.
 
 ```bash
 cd backend
@@ -33,28 +65,40 @@ cd ../frontend
 pnpm install --frozen-lockfile
 ```
 
-Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env` when the tutorial reaches environment configuration. The backend file contains only Azure provider configuration; the frontend file contains `VITE_API_BASE_URL`. Add real Azure values only when the provider stages require them.
+For a live invoice review, configure Azure values in `backend/.env`:
 
-## Verify the starter installation
+```text
+AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=
+AZURE_DOCUMENT_INTELLIGENCE_KEY=
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_DEPLOYMENT=
+AZURE_OPENAI_API_KEY=
+```
+
+Start the backend and frontend using the project development script, or run the
+backend directly:
 
 ```bash
 cd backend
-uv sync --locked
-
-cd ../frontend
-pnpm install --frozen-lockfile
+uv run --locked --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-## Choose a branch
+Open <http://127.0.0.1:8000/> when serving the staged frontend. The fictional demo
+does not use Azure credentials.
 
-- `main`: clone this branch to follow the tutorial from the prepared starting point.
-- `development`: inspect the public working branch and later experiments.
-- `solution`: inspect the reviewed end product.
-
-To switch to the finished application:
+## Verify
 
 ```bash
-git switch solution
+cd backend
+uv run --locked --no-sync ruff check app
+uv run --locked --no-sync python -m compileall -q app
+
+cd ../frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
 ```
 
-Start with [the client brief](docs/client-brief.md), then follow the [complete tutorial](https://learn.datalumina.com/docs/invoice-review).
+See [the client brief](docs/client-brief.md), [architecture](docs/architecture.md),
+and [build-along guide](docs/build-along.md) for the product boundary and teaching
+checkpoints.

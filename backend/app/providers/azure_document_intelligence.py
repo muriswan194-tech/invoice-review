@@ -7,7 +7,7 @@ from typing import Any, Literal
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 
-from app.config import Settings
+from app.config import Settings, require_setting
 from app.invoices.models import InvoiceDocument, ReceiptDocument
 
 
@@ -25,8 +25,12 @@ def read_document(
     document_type: Literal["invoice", "receipt"] = "invoice",
 ) -> PrimaryExtraction:
     client = DocumentIntelligenceClient(
-        endpoint=config.document_intelligence_endpoint,
-        credential=AzureKeyCredential(config.document_intelligence_key),
+        endpoint=require_setting(
+            config.document_intelligence_endpoint, "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"
+        ),
+        credential=AzureKeyCredential(
+            require_setting(config.document_intelligence_key, "AZURE_DOCUMENT_INTELLIGENCE_KEY")
+        ),
     )
 
     with file_path.open("rb") as document:
@@ -58,16 +62,23 @@ def read_document(
     return PrimaryExtraction(
         document=InvoiceDocument(
             supplier_name=field_content(fields, "VendorName"),
-            supplier_vat_id=field_content(fields, "VendorTaxId"),
-            customer_vat_id=field_content(fields, "CustomerTaxId"),
+            supplier_gstin=field_content(fields, "VendorTaxId"),
+            buyer_gstin=field_content(fields, "CustomerTaxId"),
             invoice_number=field_content(fields, "InvoiceId"),
             purchase_order=field_content(fields, "PurchaseOrder"),
             date=field_date(fields, "InvoiceDate"),
             due_date=field_date(fields, "DueDate"),
-            subtotal=field_amount(fields, "SubTotal"),
-            vat_total=field_amount(fields, "TotalTax"),
+            taxable_value=field_amount(fields, "SubTotal"),
             total=field_amount(fields, "InvoiceTotal"),
             currency=field_currency(fields, "InvoiceTotal"),
+            cgst=field_amount(fields, "CGST"),
+            sgst_or_utgst=field_amount(fields, "SGST"),
+            igst=field_amount(fields, "IGST"),
+            cess=field_amount(fields, "Cess"),
+            place_of_supply=field_content(fields, "PlaceOfSupply"),
+            hsn_sac=field_content(fields, "HSNSAC"),
+            project_code=field_content(fields, "ProjectCode"),
+            cost_centre=field_content(fields, "CostCentre"),
         ),
         confidence=confidence,
     )

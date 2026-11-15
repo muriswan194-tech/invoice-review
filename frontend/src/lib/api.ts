@@ -8,10 +8,12 @@ export type CheckResult = {
   difference?: string | null
   missing?: string[]
   key?: string | null
+  buyer_matches?: boolean | null
   supplier_valid?: boolean | null
-  customer_valid?: boolean | null
-  customer_matches?: boolean | null
+  buyer_valid?: boolean | null
   confidence?: number | null
+  name?: string
+  assessments?: Record<string, { applicability: 'applicable' | 'not_applicable'; state: 'present' | 'missing' | 'invalid' | 'not_assessed' }>
 }
 
 export type Issue = {
@@ -19,29 +21,9 @@ export type Issue = {
   severity: 'error' | 'warning'
   message: string
   field: string | null
-}
-
-export type GlSuggestion = {
-  account_code: string
-  account_name: string
-  confidence: number
-}
-
-export type AdvisorRecommendation = {
-  recommendation: 'APPROVE' | 'CORRECTION_REQUIRED' | 'ESCALATE'
-  summary: string
-  reasons: string[]
-  questions_for_reviewer: string[]
-}
-
-export type ChatMessage = {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-export type GlAccount = {
-  code: string
-  name: string
+  evidence?: Record<string, string>
+  route?: 'AP reviewer' | 'Project manager' | 'Accountant / TDS review' | 'Supplier clarification'
+  next_action?: string
 }
 
 export type Review = {
@@ -50,31 +32,37 @@ export type Review = {
   filename: string
   saved_name: string
   review_status: string
+  is_demo: boolean
   upload_count: number
-  can_approve: boolean
   can_edit: boolean
-  can_request_correction: boolean
   primary_confidence: number | null
-  selected_account_code: string | null
   classification: {
     document_type: DocumentType
-    confidence: number
+    confidence?: number | null
+    source?: string
   }
   field_sources: Record<string, string>
   conflicts: string[]
-  gl_suggestion: GlSuggestion
-  advisor: AdvisorRecommendation | null
   document: Record<string, unknown>
   checks: Record<string, CheckResult>
   issues: Issue[]
 }
 
-export type CorrectionEmail = {
-  subject: string
-  body: string
+export type ProcessingStage = 'extract' | 'validate'
+
+export type GstSource = {
+  id: string
+  name: string
+  authority: string
+  category: string
+  purpose: string
+  url: string
+  related_rules: string[]
+  last_checked: string
+  status: string
+  limitation: string
 }
 
-export type Decision = 'approved' | 'rejected' | 'correction_requested'
 
 async function readBody<T>(response: Response, fallbackMessage: string): Promise<T> {
   const body = await response.json() as T | { detail?: string }
@@ -97,9 +85,55 @@ export async function uploadDocument(file: File, documentType: DocumentType): Pr
   return readBody<Review>(response, 'The document could not be processed.')
 }
 
+export async function uploadDocumentWithProgress(
+  file: File,
+  documentType: DocumentType,
+  onProgress: (stage: ProcessingStage) => void,
+): Promise<Review> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('document_type', documentType)
+
+  const response = await fetch(`${env.apiBaseUrl}/invoices/upload/stream`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!response.ok) return readBody<Review>(response, 'The document could not be processed.')
+  if (!response.body) throw new Error('The review pipeline did not return progress updates.')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+    const events = buffer.split('\n\n')
+    buffer = events.pop() ?? ''
+    for (const rawEvent of events) {
+      if (!rawEvent.startsWith('data: ')) continue
+      const event = JSON.parse(rawEvent.slice(6)) as { event: string; stage?: ProcessingStage; detail?: string; review?: Review }
+      if (event.event === 'progress' && event.stage) onProgress(event.stage)
+      if (event.event === 'error') throw new Error(event.detail ?? 'The document could not be processed.')
+      if (event.event === 'complete' && event.review) return event.review
+    }
+    if (done) break
+  }
+  throw new Error('The review pipeline ended before returning a review.')
+}
+
+export async function openDemoReview(): Promise<Review> {
+  const response = await fetch(`${env.apiBaseUrl}/invoices/demo`, { method: 'POST' })
+  return readBody<Review>(response, 'The local demo could not be opened.')
+}
+
 export async function fetchHistory(): Promise<Review[]> {
   const response = await fetch(`${env.apiBaseUrl}/invoices/history`)
   return readBody<Review[]>(response, 'Review history could not be loaded.')
+}
+
+export async function fetchGstSources(): Promise<GstSource[]> {
+  const response = await fetch(`${env.apiBaseUrl}/gst-sources`)
+  return readBody<GstSource[]>(response, 'GST sources could not be loaded.')
 }
 
 export async function saveCorrections(recordId: number, fields: Record<string, string | null>): Promise<Review> {
@@ -111,24 +145,6 @@ export async function saveCorrections(recordId: number, fields: Record<string, s
   return readBody<Review>(response, 'The corrections could not be saved.')
 }
 
-export async function saveAccount(recordId: number, accountCode: string): Promise<Review> {
-  const response = await fetch(`${env.apiBaseUrl}/invoices/${recordId}/accounting`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account_code: accountCode }),
-  })
-  return readBody<Review>(response, 'The account selection could not be saved.')
-}
-
-export async function updateDecision(recordId: number, decision: Decision): Promise<Review> {
-  const response = await fetch(`${env.apiBaseUrl}/invoices/${recordId}/decision`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ decision }),
-  })
-  return readBody<Review>(response, 'The review decision could not be saved.')
-}
-
 export async function deleteReview(recordId: number): Promise<void> {
   const response = await fetch(`${env.apiBaseUrl}/invoices/${recordId}`, { method: 'DELETE' })
   if (!response.ok) {
@@ -136,14 +152,6 @@ export async function deleteReview(recordId: number): Promise<void> {
   }
 }
 
-export async function requestCorrectionEmail(recordId: number): Promise<CorrectionEmail> {
-  const response = await fetch(`${env.apiBaseUrl}/invoices/${recordId}/correction-email`, {
-    method: 'POST',
-  })
-  return readBody<CorrectionEmail>(response, 'The correction draft could not be generated.')
-}
-
-export async function fetchGlAccounts(): Promise<GlAccount[]> {
-  const response = await fetch(`${env.apiBaseUrl}/accounting/gl-accounts`)
-  return readBody<GlAccount[]>(response, 'The GL catalog could not be loaded.')
+export function reviewDocumentUrl(recordId: number): string {
+  return `${env.apiBaseUrl}/invoices/${recordId}/document`
 }

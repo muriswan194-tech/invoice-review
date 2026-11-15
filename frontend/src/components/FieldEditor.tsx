@@ -11,7 +11,7 @@ type Props = {
 
 /** Editable projection of the extracted fields, with the source of each value. */
 function FieldEditor({ review, isSaving, onSave }: Props) {
-  const fields = editableFields(review.document_type)
+  const fields = editableFields()
   const [edits, setEdits] = useState<Record<string, string>>({})
 
   function valueFor(name: string) {
@@ -30,7 +30,7 @@ function FieldEditor({ review, isSaving, onSave }: Props) {
   }
 
   return (
-    <form className="block" onSubmit={handleSubmit}>
+    <form id="extracted-fields" className="block" onSubmit={handleSubmit}>
       <div className="block-head">
         <h3>Review extracted fields</h3>
         <span className="block-count">

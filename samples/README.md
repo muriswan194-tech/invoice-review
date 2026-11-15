@@ -1,4 +1,6 @@
-# Sample invoices
+# Sample documents
+
+The primary offline walkthrough uses `generated/prism-gst-exception.pdf`, a fictional INR invoice for GST Invoice Exception Desk. It contains deliberate exceptions and never calls Azure. The older multilingual corpus remains available as extraction regression material.
 
 The project uses a generated golden corpus of 12 fictional invoices plus one Dutch fuel receipt in English, Dutch, German, and French. `manifest.json` records the expected document type, normalized fields, and policy outcomes. No private document or random internet scrape belongs in this repository.
 
