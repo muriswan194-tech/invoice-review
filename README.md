@@ -86,6 +86,22 @@ uv run --locked --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
 Open <http://127.0.0.1:8000/> when serving the staged frontend. The fictional demo
 does not use Azure credentials.
 
+## Deploy the frontend to Cloudflare Workers
+
+The Cloudflare deployment serves the built React frontend from `frontend/dist`.
+Configure the Cloudflare Worker build with:
+
+```text
+Build command: pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend build
+Deploy command: pnpm exec wrangler deploy
+```
+
+The repository root is the Wrangler project directory. Set
+`VITE_API_BASE_URL` to the public HTTPS URL of the separately hosted FastAPI
+backend before the build. The backend must allow the Cloudflare origin in its
+CORS configuration; Cloudflare hosts the frontend only and does not run the
+Python API or its SQLite storage.
+
 ## Verify
 
 ```bash

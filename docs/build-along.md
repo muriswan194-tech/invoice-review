@@ -993,4 +993,37 @@ The account selector and `GET /accounting/gl-accounts` offer rent and utilities,
 - [ ] `./scripts/dev.sh --check` reports that Invoice Review is ready to start.
 - [ ] The health endpoint and starter screen load locally.
 
+## Slice: Cloudflare frontend deployment
+
+### Outcome
+
+The Cloudflare Worker now serves the production Vite build from `frontend/dist`
+instead of the repository's source `index.html`.
+
+### Why
+
+Serving the source HTML makes the browser request `/src/main.tsx`, which is not
+available in a production deployment. Wrangler must be pointed at the generated
+static asset directory and configured to return the SPA shell for client routes.
+
+### Commands
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend build
+pnpm exec wrangler deploy
+```
+
+### Observable result
+
+The deployed root document references hashed files under `/assets/`, and the
+Cloudflare Worker returns the React application for client-side routes.
+
+### Checkpoint
+
+- [x] Wrangler serves `frontend/dist`.
+- [x] SPA fallback is enabled for non-file routes.
+- [ ] `VITE_API_BASE_URL` points to a public HTTPS FastAPI backend.
+- [ ] The backend allows the deployed Cloudflare origin through CORS.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).
